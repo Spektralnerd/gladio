@@ -2419,9 +2419,13 @@ void glGetDoublei_vEXT(GLenum pname, GLuint index, GLdouble* params) {
 }
 
 void glGetDoublev(GLenum pname, GLdouble* data) {
-    GLfloat dataf;
-    glGetFloatv(pname, &dataf);
-    *data = dataf;
+    GL_CALL_LOCK();
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GET_FLOATV, &pname, sizeof(GLenum));
+    GL_RECV_CHECKED();
+    const GLfloat* values = (const GLfloat*)inputBuffer.buffer;
+    int count = inputBuffer.size / (int)sizeof(GLfloat);
+    for (int i = 0; i < count; i++) data[i] = values[i];
+    GL_CALL_UNLOCK();
 }
 
 GLenum glGetError() {
