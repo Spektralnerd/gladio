@@ -5,6 +5,16 @@
 
 pthread_mutex_t gl_call_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// The server fills pixel pack buffers (glReadPixels into a buffer object) in the shared mapping
+// while it works through the request queue. Before the client reads one, wait until the server
+// has handled every earlier request. Called with the GL call lock held.
+static void waitForPixelPackBuffer(GLenum target) {
+    if (target != GL_PIXEL_PACK_BUFFER) return;
+    if (gl_send(currentGLContext->serverRing, REQUEST_CODE_GL_FINISH, NULL, 0)) {
+        gl_recv(currentGLContext->clientRing, NULL, &inputBuffer);
+    }
+}
+
 void glAccum(GLenum op, GLfloat value) {
     GL_CALL_LOCK();
     ArrayBuffer_rewind(&outputBuffer);
@@ -2370,7 +2380,10 @@ void glGetBufferPointervARB(GLenum target, GLenum pname, void** params) {
 void glGetBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, void* data) {
     GL_CALL_LOCK();
     GLBuffer* buffer = GLBuffer_getBound(target);
-    if (buffer) memcpy(data, buffer->mappedData + offset, size);
+    if (buffer && buffer->mappedData) {
+        waitForPixelPackBuffer(target);
+        memcpy(data, buffer->mappedData + offset, size);
+    }
     GL_CALL_UNLOCK();
 }
 
@@ -3626,6 +3639,7 @@ void* glMapBufferRange(GLenum target, GLintptr offset, GLsizeiptr length, GLbitf
     buffer->mapLength = length;
     buffer->mapped = true;
 
+    waitForPixelPackBuffer(target);
     void* result = buffer->mappedData + offset;
     GL_CALL_UNLOCK();
     return result;
