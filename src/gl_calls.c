@@ -3449,7 +3449,16 @@ void glLightModelf(GLenum pname, GLfloat param) {
 }
 
 void glLightModelfv(GLenum pname, const GLfloat* params) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glLightModelfv");
+    // always 4 values on the wire, only GL_LIGHT_MODEL_AMBIENT uses all of them
+    GLfloat values[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    memcpy(values, params, (pname == GL_LIGHT_MODEL_AMBIENT ? 4 : 1) * sizeof(GLfloat));
+
+    GL_CALL_LOCK();
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, pname);
+    ArrayBuffer_putBytes(&outputBuffer, values, sizeof(values));
+    gl_send(currentGLContext->serverRing, REQUEST_CODE_GL_LIGHT_MODELFV, outputBuffer.buffer, outputBuffer.size);
+    GL_CALL_UNLOCK();
 }
 
 void glLightModeli(GLenum pname, GLint param) {
@@ -3462,7 +3471,13 @@ void glLightModeli(GLenum pname, GLint param) {
 }
 
 void glLightModeliv(GLenum pname, const GLint* params) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glLightModeliv");
+    GLfloat values[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    if (pname == GL_LIGHT_MODEL_AMBIENT) {
+        // integer colors map INT32_MAX to 1.0, like the other color parameters
+        for (int i = 0; i < 4; i++) values[i] = (GLfloat)((double)params[i] / (double)INT32_MAX);
+    }
+    else values[0] = (GLfloat)params[0];
+    glLightModelfv(pname, values);
 }
 
 void glLightf(GLenum light, GLenum pname, GLfloat param) {
